@@ -1,19 +1,23 @@
 import torch
 import torch.nn as nn
 from torch.nn import Linear
-from torch_geometric.nn.conv import TransformerConv
+from torch_geometric.nn.conv import TransformerConv, GCNConv
+from torch_geometric.nn import (
+    global_mean_pool,
+)
 from torch_geometric.nn import Set2Set
 from torch_geometric.nn import BatchNorm
 from config import SUPPORTED_ATOMS, SUPPORTED_EDGES, MAX_MOLECULE_SIZE, ATOMIC_NUMBERS
 from utils import graph_representation_to_molecule, to_one_hot
 from tqdm import tqdm
+import numpy
 
 class GVAE(nn.Module):
     def __init__(self, feature_size):
         super(GVAE, self).__init__()
         self.encoder_embedding_size = 64
         self.edge_dim = 11
-        self.latent_embedding_size = 128
+        self.latent_embedding_size = 20            # must be a square number, so we can convert it to a matrix and take an inner product with its transpose.
         self.num_edge_types = len(SUPPORTED_EDGES) 
         self.num_atom_types = len(SUPPORTED_ATOMS)
         self.max_num_atoms = MAX_MOLECULE_SIZE 
@@ -52,9 +56,9 @@ class GVAE(nn.Module):
         self.pooling = Set2Set(self.encoder_embedding_size, processing_steps=4)
 
         # Latent transform layers
-        self.mu_transform = Linear(self.encoder_embedding_size*2, 
+        self.mu_transform = Linear(self.encoder_embedding_size, 
                                             self.latent_embedding_size)
-        self.logvar_transform = Linear(self.encoder_embedding_size*2, 
+        self.logvar_transform = Linear(self.encoder_embedding_size, 
                                             self.latent_embedding_size)
 
         # Decoder layers
@@ -63,12 +67,14 @@ class GVAE(nn.Module):
         self.linear_2 = Linear(self.decoder_hidden_neurons, self.decoder_hidden_neurons)
 
         # --- Atom decoding (outputs a matrix: (max_num_atoms) * (# atom_types + "none"-type))   
-        atom_output_dim = self.max_num_atoms*(self.num_atom_types + 1)
-        self.atom_decode = Linear(self.decoder_hidden_neurons, atom_output_dim)
+        self.atom_output_dim = self.num_atom_types + 1
+        self.atom_decode = Linear(self.decoder_hidden_neurons, self.atom_output_dim)
 
         # --- Edge decoding (outputs a triu tensor: (max_num_atoms*(max_num_atoms-1)/2*(#edge_types + 1) ))
         edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
         self.edge_decode = Linear(self.decoder_hidden_neurons, edge_output_dim)
+        self.edge_conv_decoder = GCNConv(self.latent_embedding_size, edge_output_dim)
+
         
 
     def encode(self, x, edge_attr, edge_index, batch_index):
@@ -82,7 +88,8 @@ class GVAE(nn.Module):
         x = self.conv4(x, edge_index, edge_attr).relu()
 
         # Pool to global representation
-        x = self.pooling(x, batch_index)
+        # No, don't pool. Keep each
+        #x = self.pooling(x, batch_index)
 
         # Latent transform layers
         mu = self.mu_transform(x)
@@ -94,24 +101,63 @@ class GVAE(nn.Module):
         Decodes a latent vector into a continuous graph representation
         consisting of node types and edge types.
         """
-        # Pass through shared layers
+        #TODO add padding to the list of nodes. 
+        num_atoms = len(graph_z)
+        # Decode atom types
         z = self.linear_1(graph_z).relu()
         z = self.linear_2(z).relu()
-        # Decode atom types
-        atom_logits = self.atom_decode(z)
+        
+
+        # go through each row of z to predict that atom
+        atom_logits = []
+        for row in z:
+            atom_logit = self.atom_decode(row)
+            atom_logits += (atom_logit)
+        
+        for i in range(self.max_num_atoms - num_atoms):
+            atom_logits += (torch.zeros(self.atom_output_dim))
+        
+        atom_logits = torch.tensor(atom_logits)
         # Decode edge types
-        edge_logits = self.edge_decode(z)
+
+        # take the inner product
+        norm_Z = torch.norm(graph_z)
+        hat_A = torch.mm(graph_z, graph_z.t()) / (norm_Z ** 2)
+
+        # weighted adjacency graph
+        hat_A = hat_A + torch.ones_like(hat_A)
+
+        hat_A.fill_diagonal_(0)
+
+        # 1D edge weight array
+        collapsed_tensor = hat_A[hat_A != 0]
+
+
+        # Generate all possible edges (i, j) where i != j
+        n = num_atoms
+        edge_index = torch.tensor([[i, j] for i in range(n) for j in range(n) if i != j], dtype=torch.long).t().contiguous()
+
+        #error here
+        out = self.edge_conv_decoder(graph_z, edge_index, edge_weight = collapsed_tensor)
+
+        # take the values of the top half. 
+
+
+
+        edge_logits = torch.mean(out, dim=0)
+        
 
         return atom_logits, edge_logits
 
 
-    def decode(self, z, batch_index):
+    def decode(self, z, batch_index, ends):
         node_logits = []
         triu_logits = []
         # Iterate over molecules in batch
-        for graph_id in torch.unique(batch_index):
-            # Get latent vector for this graph
-            graph_z = z[graph_id]
+        start = 0
+        for end in ends:
+
+            graph_z = z[start:end]
 
             # Recover graph from latent vector
             atom_logits, edge_logits = self.decode_graph(graph_z)
@@ -137,15 +183,32 @@ class GVAE(nn.Module):
         else:
             return mu
 
-    def forward(self, x, edge_attr, edge_index, batch_index):
+    def forward(self, x, edge_attr, edge_index, batch_index): # batch index tells us where each node is.
         # Encode the molecule
         mu, logvar = self.encode(x, edge_attr, edge_index, batch_index)
         # Sample latent vector (per atom)
         z = self.reparameterize(mu, logvar)
+        ends = self.find_ends(batch_index)
         # Decode latent vector into original molecule
-        triu_logits, node_logits = self.decode(z, batch_index)
+        triu_logits, node_logits = self.decode(z, batch_index, ends)
 
         return triu_logits, node_logits, mu, logvar
+    
+    # index of the last node in a given graph. 
+    def find_ends(self, batch_index):
+        end = 0
+        batch_index = batch_index.detach().numpy()
+        ends = []
+        while end < len(batch_index) - 1:
+            graph_num = batch_index[end]
+            index = numpy.where(batch_index == graph_num)
+            end = index[0][-1] + 1
+            ends.append(end)
+        
+
+        return ends
+
+
 
     
     def sample_mols(self, num=10000):

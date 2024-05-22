@@ -83,7 +83,8 @@ class MoleculeDataset(Dataset):
                                     f'data_{self.length}.pt'))
                 self.length += 1
             else:
-                print("Skipping invalid mol (too big/unknown atoms): ", data.smiles)
+                pass
+                #print("Skipping invalid mol (too big/unknown atoms): ", data.smiles)
         print(f"Done. Stored {self.length} preprocessed molecules.")
 
     def _get_label(self, label):

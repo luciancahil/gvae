@@ -16,7 +16,7 @@ train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
 # Load model
-model = GVAE(feature_size=train_dataset[0].x.shape[1])
+model = GVAE(feature_size=train_dataset[0].x.shape[1]) # feature_size=30 by default
 model = model.to(device)
 print("Model parameters: ", count_parameters(model))
 
@@ -26,7 +26,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 kl_beta = 0.5
 
 # Train function
-def run_one_epoch(data_loader, type, epoch, kl_beta):
+def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
     # Store per batch loss and accuracy 
     all_losses = []
     all_kldivs = []
@@ -51,7 +51,7 @@ def run_one_epoch(data_loader, type, epoch, kl_beta):
                                    batch.edge_index, edge_targets, 
                                    node_targets, mu, logvar, 
                                    batch.batch, kl_beta)
-            if type == "Train":
+            if curr_type == "Train":
                 loss.backward()  
                 optimizer.step() 
             # Store loss and metrics
@@ -64,22 +64,22 @@ def run_one_epoch(data_loader, type, epoch, kl_beta):
             print("Error: ", error)
     
     # Perform sampling
-    if type == "Test":
+    if curr_type == "Test":
         generated_mols = model.sample_mols(num=10000)
         print(f"Generated {generated_mols} molecules.")
         mlflow.log_metric(key=f"Sampled molecules", value=float(generated_mols), step=epoch)
 
-    print(f"{type} epoch {epoch} loss: ", np.array(all_losses).mean())
-    mlflow.log_metric(key=f"{type} Epoch Loss", value=float(np.array(all_losses).mean()), step=epoch)
-    mlflow.log_metric(key=f"{type} KL Divergence", value=float(np.array(all_kldivs).mean()), step=epoch)
+    print(f"{curr_type} epoch {epoch} loss: ", np.array(all_losses).mean())
+    mlflow.log_metric(key=f"{curr_type} Epoch Loss", value=float(np.array(all_losses).mean()), step=epoch)
+    mlflow.log_metric(key=f"{curr_type} KL Divergence", value=float(np.array(all_kldivs).mean()), step=epoch)
     mlflow.pytorch.log_model(model, "model")
 
 # Run training
 with mlflow.start_run() as run:
     for epoch in range(100): 
         model.train()
-        run_one_epoch(train_loader, type="Train", epoch=epoch, kl_beta=kl_beta)
+        run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
         if epoch % 5 == 0:
             print("Start test epoch...")
             model.eval()
-            run_one_epoch(test_loader, type="Test", epoch=epoch, kl_beta=kl_beta)
+            run_one_epoch(test_loader, curr_type="Test", epoch=epoch, kl_beta=kl_beta)

@@ -1,1 +1,5 @@
-data/preprocessed/
+data/processed/*.pt
+
+*.pyc
+
+mlruns/*

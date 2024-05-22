@@ -17,7 +17,7 @@ class GVAE(nn.Module):
         super(GVAE, self).__init__()
         self.encoder_embedding_size = 64
         self.edge_dim = 11
-        self.latent_embedding_size = 20            # must be a square number, so we can convert it to a matrix and take an inner product with its transpose.
+        self.latent_embedding_size = 121            # must be a square number, so we can convert it to a matrix and take an inner product with its transpose.
         self.num_edge_types = len(SUPPORTED_EDGES) 
         self.num_atom_types = len(SUPPORTED_ATOMS)
         self.max_num_atoms = MAX_MOLECULE_SIZE 
@@ -68,7 +68,7 @@ class GVAE(nn.Module):
 
         # --- Atom decoding (outputs a matrix: (max_num_atoms) * (# atom_types + "none"-type))   
         self.atom_output_dim = self.num_atom_types + 1
-        self.atom_decode = Linear(self.decoder_hidden_neurons, self.atom_output_dim)
+        self.atom_decode_layer = Linear(self.decoder_hidden_neurons, self.atom_output_dim)
 
         # --- Edge decoding (outputs a triu tensor: (max_num_atoms*(max_num_atoms-1)/2*(#edge_types + 1) ))
         edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
@@ -101,23 +101,21 @@ class GVAE(nn.Module):
         Decodes a latent vector into a continuous graph representation
         consisting of node types and edge types.
         """
-        #TODO add padding to the list of nodes. 
         num_atoms = len(graph_z)
         # Decode atom types
         z = self.linear_1(graph_z).relu()
         z = self.linear_2(z).relu()
-        
+        atom_logits = self.atom_decode_layer(z)
 
-        # go through each row of z to predict that atom
-        atom_logits = []
-        for row in z:
-            atom_logit = self.atom_decode(row)
-            atom_logits += (atom_logit)
-        
-        for i in range(self.max_num_atoms - num_atoms):
-            atom_logits += (torch.zeros(self.atom_output_dim))
-        
-        atom_logits = torch.tensor(atom_logits)
+        # Calculate the number of rows to add
+        num_rows_to_add = self.max_num_atoms - num_atoms
+
+        # Create the rows to add
+        rows_to_add = torch.zeros((num_rows_to_add, self.atom_output_dim))
+
+        # pad to 20, then flatten
+        atom_logits = torch.cat([atom_logits, rows_to_add], dim=0)
+        atom_logits = torch.flatten(atom_logits)
         # Decode edge types
 
         # take the inner product
@@ -161,10 +159,10 @@ class GVAE(nn.Module):
 
             # Recover graph from latent vector
             atom_logits, edge_logits = self.decode_graph(graph_z)
-
             # Store per graph results
             node_logits.append(atom_logits)
             triu_logits.append(edge_logits)
+            start = end
 
         # Concatenate all outputs of the batch
         node_logits = torch.cat(node_logits)
@@ -218,11 +216,13 @@ class GVAE(nn.Module):
         # Sample molecules and check if they are valid
         for _ in tqdm(range(num)):
             # Sample latent space
-            z = torch.randn(1, self.latent_embedding_size)
+            z = torch.randn(self.max_num_atoms, self.latent_embedding_size)
 
             # Get model output (this could also be batched)
             dummy_batch_index = torch.Tensor([0]).int()
-            triu_logits, node_logits = self.decode(z, dummy_batch_index)
+            ends = [20]
+            
+            triu_logits, node_logits = self.decode(z, dummy_batch_index, ends)
 
             # Reshape triu predictions 
             edge_matrix_shape = (int((MAX_MOLECULE_SIZE * (MAX_MOLECULE_SIZE - 1))/2), len(SUPPORTED_EDGES) + 1) 

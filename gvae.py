@@ -87,9 +87,7 @@ class GVAE(nn.Module):
         x = self.bn3(x)
         x = self.conv4(x, edge_index, edge_attr).relu()
 
-        # Pool to global representation
-        # No, don't pool. Keep each
-        #x = self.pooling(x, batch_index)
+
 
         # Latent transform layers
         mu = self.mu_transform(x)
@@ -101,21 +99,6 @@ class GVAE(nn.Module):
         Decodes a latent vector into a continuous graph representation
         consisting of node types and edge types.
         """
-        num_atoms = len(graph_z)
-        # Decode atom types
-        z = self.linear_1(graph_z).relu()
-        z = self.linear_2(z).relu()
-        atom_logits = self.atom_decode_layer(z)
-
-        # Calculate the number of rows to add
-        num_rows_to_add = self.max_num_atoms - num_atoms
-
-        # Create the rows to add
-        rows_to_add = torch.zeros((num_rows_to_add, self.atom_output_dim))
-
-        # pad to 20, then flatten
-        atom_logits = torch.cat([atom_logits, rows_to_add], dim=0)
-        atom_logits = torch.flatten(atom_logits)
         # Decode edge types
 
         # take the inner product
@@ -132,7 +115,7 @@ class GVAE(nn.Module):
 
 
         # Generate all possible edges (i, j) where i != j
-        n = num_atoms
+        n = MAX_MOLECULE_SIZE
         edge_index = torch.tensor([[i, j] for i in range(n) for j in range(n) if i != j], dtype=torch.long).t().contiguous()
 
         #error here
@@ -145,28 +128,39 @@ class GVAE(nn.Module):
         edge_logits = torch.mean(out, dim=0)
         
 
-        return atom_logits, edge_logits
+        return edge_logits
+    
+
+    def decode_atoms(self, z):
+        # Decode atom types
+        z = self.linear_1(z).relu()
+        z = self.linear_2(z).relu()
+        z = self.atom_decode_layer(z)
+
+        return z
+
 
 
     def decode(self, z, batch_index, ends):
-        node_logits = []
         triu_logits = []
         # Iterate over molecules in batch
         start = 0
+        node_logits = self.decode_atoms(z)
+
         for end in ends:
 
             graph_z = z[start:end]
 
             # Recover graph from latent vector
-            atom_logits, edge_logits = self.decode_graph(graph_z)
+            edge_logits = self.decode_graph(graph_z)
             # Store per graph results
-            node_logits.append(atom_logits)
             triu_logits.append(edge_logits)
             start = end
 
+
         # Concatenate all outputs of the batch
-        node_logits = torch.cat(node_logits)
         triu_logits = torch.cat(triu_logits)
+        breakpoint()
         return triu_logits, node_logits
 
 

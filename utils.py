@@ -5,6 +5,7 @@ from rdkit import RDLogger
 from config import DEVICE as device
 from config import (SUPPORTED_ATOMS, SUPPORTED_EDGES, MAX_MOLECULE_SIZE, ATOMIC_NUMBERS,
                     DISABLE_RDKIT_WARNINGS)
+import torch.nn.functional as F
 
 # Disable rdkit warnings
 if DISABLE_RDKIT_WARNINGS:
@@ -208,7 +209,7 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
 
     # Reshape node predictions
     node_matrix_shape = (MAX_MOLECULE_SIZE, (len(SUPPORTED_ATOMS) + 1)) 
-    node_preds_matrix = node_preds.reshape(node_matrix_shape)
+    node_preds_matrix = node_preds.flatten().reshape(node_matrix_shape)
 
     # Reshape triu predictions 
     edge_matrix_shape = (int((MAX_MOLECULE_SIZE * (MAX_MOLECULE_SIZE - 1))/2), len(SUPPORTED_EDGES) + 1) 
@@ -246,8 +247,25 @@ def gvae_loss(triu_logits, node_logits, edge_index, edge_types, node_types, \
     Calculates the loss for the graph variational autoencoder,
     consiting of a node loss, an edge loss and the KL divergence.
     """
-    # Convert target edge index to dense adjacency matrix
-    batch_edge_targets = torch.squeeze(to_dense_adj(edge_index))
+    # Desired size of the dense adjacency matrix
+    N = len(batch_index) # For example, 5x5
+
+    # Convert edge index to dense adjacency matrix
+    dense_adj = torch.squeeze(to_dense_adj(edge_index))
+
+    # Get the current size of the dense adjacency matrix
+    current_size = dense_adj.size(0)
+
+    # Calculate the padding needed
+    padding_size = N - current_size
+
+    if padding_size > 0:
+        # Pad the matrix to the desired size
+        batch_edge_targets = F.pad(dense_adj, (0, padding_size, 0, padding_size), "constant", 0)
+    else:
+        # No padding needed, just use the dense adjacency matrix as is
+        batch_edge_targets = dense_adj
+    
 
     # Add edge types to adjacency targets
     batch_edge_targets[edge_index[0], edge_index[1]] = edge_types[:, 1].float()

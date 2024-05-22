@@ -145,7 +145,7 @@ class GVAE(nn.Module):
         triu_logits = []
         # Iterate over molecules in batch
         start = 0
-        node_logits = self.decode_atoms(z)
+        node_logits = self.decode_atoms(z).flatten()
 
         for end in ends:
 
@@ -160,7 +160,6 @@ class GVAE(nn.Module):
 
         # Concatenate all outputs of the batch
         triu_logits = torch.cat(triu_logits)
-        breakpoint()
         return triu_logits, node_logits
 
 

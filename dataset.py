@@ -9,6 +9,7 @@ import deepchem as dc
 from config import MAX_MOLECULE_SIZE
 from utils import slice_atom_type_from_node_feats
 import re
+import torch.nn.functional as F
 
 print(f"Torch version: {torch.__version__}")
 print(f"Cuda available: {torch.cuda.is_available()}")
@@ -73,6 +74,13 @@ class MoleculeDataset(Dataset):
 
             # Only save if molecule is in permitted size
             if (data.x.shape[0] < MAX_MOLECULE_SIZE) and -1 not in atom_types:
+                # pad the molecule .node_feature matrix to have MAX_MOLECULE_SIZE rows
+                existing = len(f[0].node_features)
+                rows_needed = MAX_MOLECULE_SIZE - existing
+
+                data.x  = F.pad(data.x, (0, 0, 0, rows_needed))
+
+
                 if self.test:
                     torch.save(data, 
                         os.path.join(self.processed_dir, 

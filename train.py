@@ -64,10 +64,10 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
             print("Error: ", error)
     
     # Perform sampling
-    if curr_type == "Test":
+    """ if curr_type == "Test":
         generated_mols = model.sample_mols(num=10000)
         print(f"Generated {generated_mols} molecules.")
-        mlflow.log_metric(key=f"Sampled molecules", value=float(generated_mols), step=epoch)
+        mlflow.log_metric(key=f"Sampled molecules", value=float(generated_mols), step=epoch) """
 
     print(f"{curr_type} epoch {epoch} loss: ", np.array(all_losses).mean())
     mlflow.log_metric(key=f"{curr_type} Epoch Loss", value=float(np.array(all_losses).mean()), step=epoch)
@@ -76,10 +76,12 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
 
 # Run training
 with mlflow.start_run() as run:
-    for epoch in range(100): 
+    for epoch in range(1): 
         model.train()
         run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
         if epoch % 5 == 0:
             print("Start test epoch...")
             model.eval()
             run_one_epoch(test_loader, curr_type="Test", epoch=epoch, kl_beta=kl_beta)
+        
+    torch.save(model, "model.sh")

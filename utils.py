@@ -175,8 +175,8 @@ def calculate_node_edge_pair_loss(node_tar, edge_tar, node_pred, edge_pred):
     node_edge_pred_matrix = torch.sum(node_edge_preds, dim=0)
     node_edge_tar_matrix = torch.sum(node_edge_tar, dim=0)
 
-    if torch.equal(node_edge_pred_matrix.int(), node_edge_tar_matrix.int()):
-        print("Reconstructed node-edge pairs: ", node_edge_pred_matrix.int())
+    """ if torch.equal(node_edge_pred_matrix.int(), node_edge_tar_matrix.int()):
+        print("Reconstructed node-edge pairs: ", node_edge_pred_matrix.int()) """
     
     node_edge_loss = torch.mean(sum(squared_difference(node_edge_pred_matrix, node_edge_tar_matrix.float())))
 
@@ -234,10 +234,10 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
 
     approx_loss =   node_loss  + edge_loss + node_edge_loss
 
-    if all(node_targets_reduced == node_preds_reduced.int()) and \
+    """ if all(node_targets_reduced == node_preds_reduced.int()) and \
         all(triu_targets_reduced == triu_preds_reduced.int()):
         print("Reconstructed all edges: ", node_targets_reduced)
-        print("and all nodes: ", node_targets_reduced)
+        print("and all nodes: ", node_targets_reduced) """
     return approx_loss
 
 

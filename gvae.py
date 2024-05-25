@@ -11,6 +11,7 @@ from config import SUPPORTED_ATOMS, SUPPORTED_EDGES, MAX_MOLECULE_SIZE, ATOMIC_N
 from utils import graph_representation_to_molecule, to_one_hot
 from tqdm import tqdm
 import numpy
+from torch_geometric.data import Data, Batch
 
 class GVAE(nn.Module):
     def __init__(self, feature_size):
@@ -71,9 +72,9 @@ class GVAE(nn.Module):
         self.atom_decode_layer = Linear(self.decoder_hidden_neurons, self.atom_output_dim)
 
         # --- Edge decoding (outputs a triu tensor: (max_num_atoms*(max_num_atoms-1)/2*(#edge_types + 1) ))
-        edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
-        self.edge_decode = Linear(self.decoder_hidden_neurons, edge_output_dim)
-        self.edge_conv_decoder = GCNConv(self.latent_embedding_size, edge_output_dim)
+        self.edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
+        self.edge_decode = Linear(self.decoder_hidden_neurons, self.edge_output_dim)
+        self.edge_conv_decoder = GCNConv(self.latent_embedding_size, self.edge_output_dim)
 
         
 
@@ -94,7 +95,7 @@ class GVAE(nn.Module):
         logvar = self.logvar_transform(x)
         return mu, logvar
 
-    def decode_graph(self, graph_z):  
+    def decode_graph(self, graph_z, edge_index):  
         """
         Decodes a latent vector into a continuous graph representation
         consisting of node types and edge types.
@@ -111,19 +112,13 @@ class GVAE(nn.Module):
         hat_A.fill_diagonal_(0)
 
         # 1D edge weight array
-        collapsed_tensor = hat_A[hat_A != 0]
+        hat_A = hat_A[hat_A != 0]
 
 
         # Generate all possible edges (i, j) where i != j
         n = MAX_MOLECULE_SIZE
-        edge_index = torch.tensor([[i, j] for i in range(n) for j in range(n) if i != j], dtype=torch.long).t().contiguous()
 
-        #error here
-        out = self.edge_conv_decoder(graph_z, edge_index, edge_weight = collapsed_tensor)
-
-        # take the values of the top half. 
-
-
+        out = self.edge_conv_decoder(graph_z, edge_index, edge_weight = hat_A)
 
         edge_logits = torch.mean(out, dim=0)
         
@@ -139,27 +134,66 @@ class GVAE(nn.Module):
 
         return z
 
+    def decode_edges(self, z, edge_index):
+        # Reshape Z to represent a batch of 6 matrices of size 20 x 10
+        
+        z = z.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
+
+        # Compute Z*Z^T for each matrix in the batch
+        #TODO is there a batch triu option?
+        ZZT = torch.bmm(z, z.transpose(1, 2)) 
+
+        # Compute the Frobenius norm squared for each matrix in the batch
+        frobenius_norm_sq = torch.sum(z ** 2, dim=(1, 2), keepdim=True)  # Shape: (6, 1, 1)
+
+        # Normalize ZZ^T by the Frobenius norm squared
+        normalized_ZZT = ZZT / frobenius_norm_sq  # Broadcasting to (6, 20, 20)
+
+        # Create a matrix of ones of the same size as each ZZ^T
+        ones_matrix = torch.ones_like(ZZT)  # Shape: (6, 20, 20)
+
+        # Compute the final result
+        hat_A = normalized_ZZT + ones_matrix
 
 
-    def decode(self, z, batch_index, ends):
+        # Create a mask for the diagonal elements
+        batch_size, matrix_size, _ = hat_A.shape
+        mask = torch.eye(matrix_size).bool().unsqueeze(0).expand(batch_size, -1, -1)
+
+        # Set the diagonal elements to 0
+        hat_A[mask] = 0
+
+        # max it a num_batch * num_edges matrix
+        hat_A =  torch.reshape(hat_A, (-1, MAX_MOLECULE_SIZE * MAX_MOLECULE_SIZE))
+
+        data_list = [Data(x=z[i], edge_index = edge_index, edge_weight=hat_A[i]) for i in range(len(hat_A))]
+
+        batch = Batch.from_data_list(data_list)
+
+        # Generate all possible edges (i, j) where i != j
+        n = MAX_MOLECULE_SIZE
+
+        #error here
+        edge_logits = self.edge_conv_decoder(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
+
+
+        # take the average
+        edge_logits = edge_logits.view(-1, MAX_MOLECULE_SIZE, self.edge_output_dim)
+        edge_logits = torch.mean(edge_logits, dim=1)
+        edge_logits = edge_logits.flatten()
+
+        return edge_logits
+
+
+    def decode(self, z):
         triu_logits = []
         # Iterate over molecules in batch
-        start = 0
         node_logits = self.decode_atoms(z).flatten()
-
-        for end in ends:
-
-            graph_z = z[start:end]
-
-            # Recover graph from latent vector
-            edge_logits = self.decode_graph(graph_z)
-            # Store per graph results
-            triu_logits.append(edge_logits)
-            start = end
+        n = MAX_MOLECULE_SIZE
+        edge_index= torch.tensor([[i, j] for i in range(n) for j in range(n)], dtype=torch.long).t().contiguous()
+        triu_logits = self.decode_edges(z, edge_index)
 
 
-        # Concatenate all outputs of the batch
-        triu_logits = torch.cat(triu_logits)
         return triu_logits, node_logits
 
 
@@ -179,9 +213,9 @@ class GVAE(nn.Module):
         mu, logvar = self.encode(x, edge_attr, edge_index, batch_index)
         # Sample latent vector (per atom)
         z = self.reparameterize(mu, logvar)
-        ends = self.find_ends(batch_index)
+        #ends = self.find_ends(batch_index)
         # Decode latent vector into original molecule
-        triu_logits, node_logits = self.decode(z, batch_index, ends)
+        triu_logits, node_logits = self.decode(z)
 
         return triu_logits, node_logits, mu, logvar
     

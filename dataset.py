@@ -23,6 +23,7 @@ class MoleculeDataset(Dataset):
         """
         self.test = test
         self.filename = filename
+        self.elements = []
         self.length = length
         super(MoleculeDataset, self).__init__(root, transform, pre_transform)
         
@@ -36,24 +37,9 @@ class MoleculeDataset(Dataset):
     @property
     def processed_file_names(self):
         """ If these files are found in raw_dir, processing is skipped """
-        processed_files = [f for f in os.listdir(self.processed_dir) if not f.startswith("pre")]
-    
-        if self.test:
-            processed_files = [file for file in processed_files if "test" in file]
-            if len(processed_files) == 0:
-                return ["no_files.dummy"]
-            last_file = sorted(processed_files)[-1]
-            index = int(re.search(r'\d+', last_file).group())
-            self.length = index
-            return [f'data_test_{i}.pt' for i in list(range(0, index))]
-        else:
-            processed_files = [file for file in processed_files if not "test" in file]
-            if len(processed_files) == 0:
-                return ["no_files.dummy"]
-            last_file = sorted(processed_files)[-1]
-            index = int(re.search(r'\d+', last_file).group())
-            self.length = index
-            return [f'data_{i}.pt' for i in list(range(0, index))]
+
+        # always process
+        return "Never"
         
 
     def download(self):
@@ -80,15 +66,7 @@ class MoleculeDataset(Dataset):
 
                 data.x  = F.pad(data.x, (0, 0, 0, rows_needed))
 
-
-                if self.test:
-                    torch.save(data, 
-                        os.path.join(self.processed_dir, 
-                                    f'data_test_{self.length}.pt'))
-                else:
-                    torch.save(data, 
-                        os.path.join(self.processed_dir, 
-                                    f'data_{self.length}.pt'))
+                self.elements.append(data)
                 self.length += 1
             else:
                 pass
@@ -103,14 +81,4 @@ class MoleculeDataset(Dataset):
         return self.length
 
     def get(self, idx):
-        """ 
-        - Equivalent to __getitem__ in pytorch
-        - Is not needed for PyG's InMemoryDataset
-        """
-        if self.test:
-            data = torch.load(os.path.join(self.processed_dir, 
-                                 f'data_test_{idx}.pt'))
-        else:
-            data = torch.load(os.path.join(self.processed_dir, 
-                                 f'data_{idx}.pt'))        
-        return data
+        return self.elements[idx]

@@ -12,7 +12,7 @@ import re
 import torch.nn.functional as F
 
 print(f"Torch version: {torch.__version__}")
-print(f"Cuda available: {torch.cuda.is_available()}")
+print(f"Cudas available: {torch.cuda.device_count()}")
 print(f"Torch geometric version: {torch_geometric.__version__}")
 
 class MoleculeDataset(Dataset):
@@ -23,7 +23,6 @@ class MoleculeDataset(Dataset):
         """
         self.test = test
         self.filename = filename
-        self.elements = []
         self.length = length
         super(MoleculeDataset, self).__init__(root, transform, pre_transform)
         
@@ -37,9 +36,24 @@ class MoleculeDataset(Dataset):
     @property
     def processed_file_names(self):
         """ If these files are found in raw_dir, processing is skipped """
-
-        # always process
-        return "Never"
+        processed_files = [f for f in os.listdir(self.processed_dir) if not f.startswith("pre")]
+    
+        if self.test:
+            processed_files = [file for file in processed_files if "test" in file]
+            if len(processed_files) == 0:
+                return ["no_files.dummy"]
+            last_file = sorted(processed_files)[-1]
+            index = int(re.search(r'\d+', last_file).group())
+            self.length = index
+            return [f'data_test_{i}.pt' for i in list(range(0, index))]
+        else:
+            processed_files = [file for file in processed_files if not "test" in file]
+            if len(processed_files) == 0:
+                return ["no_files.dummy"]
+            last_file = sorted(processed_files)[-1]
+            index = int(re.search(r'\d+', last_file).group())
+            self.length = index
+            return [f'data_{i}.pt' for i in list(range(0, index))]
         
 
     def download(self):
@@ -66,11 +80,15 @@ class MoleculeDataset(Dataset):
 
                 data.x  = F.pad(data.x, (0, 0, 0, rows_needed))
 
-                self.elements.append(data)
+                if self.test:
+                    torch.save(data, 
+                        os.path.join(self.processed_dir, 
+                                    f'data_test_{self.length}.pt'))
+                else:
+                    torch.save(data, 
+                        os.path.join(self.processed_dir, 
+                                    f'data_{self.length}.pt'))
                 self.length += 1
-            else:
-                pass
-                #print("Skipping invalid mol (too big/unknown atoms): ", data.smiles)
         print(f"Done. Stored {self.length} preprocessed molecules.")
 
     def _get_label(self, label):
@@ -81,4 +99,10 @@ class MoleculeDataset(Dataset):
         return self.length
 
     def get(self, idx):
-        return self.elements[idx]
+        if self.test:
+            data = torch.load(os.path.join(self.processed_dir, 
+                                 f'data_test_{idx}.pt'))
+        else:
+            data = torch.load(os.path.join(self.processed_dir, 
+                                 f'data_{idx}.pt'))        
+        return data

@@ -12,17 +12,20 @@ from utils import graph_representation_to_molecule, to_one_hot
 from tqdm import tqdm
 import numpy
 from torch_geometric.data import Data, Batch
+from config import DEVICE as device
 
 class GVAE(nn.Module):
     def __init__(self, feature_size):
         super(GVAE, self).__init__()
         self.encoder_embedding_size = 64
         self.edge_dim = 11
-        self.latent_embedding_size = 121            # must be a square number, so we can convert it to a matrix and take an inner product with its transpose.
+        self.latent_embedding_size = 121           
         self.num_edge_types = len(SUPPORTED_EDGES) 
         self.num_atom_types = len(SUPPORTED_ATOMS)
         self.max_num_atoms = MAX_MOLECULE_SIZE 
         self.decoder_hidden_neurons = 512
+        self.INTERMEDIATE_EDGE_INDEX = torch.tensor([[i, j] for i in range(MAX_MOLECULE_SIZE) for j in range(MAX_MOLECULE_SIZE)], dtype=torch.long).t().contiguous().to(device)
+
 
         # Encoder layers
         self.conv1 = TransformerConv(feature_size, 
@@ -134,7 +137,7 @@ class GVAE(nn.Module):
 
         return z
 
-    def decode_edges(self, z, edge_index):
+    def decode_edges(self, z):
         # Reshape Z to represent a batch of 6 matrices of size 20 x 10
         
         z = z.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
@@ -166,12 +169,10 @@ class GVAE(nn.Module):
         # max it a num_batch * num_edges matrix
         hat_A =  torch.reshape(hat_A, (-1, MAX_MOLECULE_SIZE * MAX_MOLECULE_SIZE))
 
-        data_list = [Data(x=z[i], edge_index = edge_index, edge_weight=hat_A[i]) for i in range(len(hat_A))]
+        data_list = [Data(x=z[i], edge_index = self.INTERMEDIATE_EDGE_INDEX, edge_weight=hat_A[i]) for i in range(len(hat_A))]
 
         batch = Batch.from_data_list(data_list)
 
-        # Generate all possible edges (i, j) where i != j
-        n = MAX_MOLECULE_SIZE
 
         #error here
         edge_logits = self.edge_conv_decoder(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
@@ -189,9 +190,7 @@ class GVAE(nn.Module):
         triu_logits = []
         # Iterate over molecules in batch
         node_logits = self.decode_atoms(z).flatten()
-        n = MAX_MOLECULE_SIZE
-        edge_index= torch.tensor([[i, j] for i in range(n) for j in range(n)], dtype=torch.long).t().contiguous()
-        triu_logits = self.decode_edges(z, edge_index)
+        triu_logits = self.decode_edges(z)
 
 
         return triu_logits, node_logits

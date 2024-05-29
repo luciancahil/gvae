@@ -12,7 +12,7 @@ import re
 import torch.nn.functional as F
 
 print(f"Torch version: {torch.__version__}")
-print(f"Cuda available: {torch.cuda.is_available()}")
+print(f"Cudas available: {torch.cuda.device_count()}")
 print(f"Torch geometric version: {torch_geometric.__version__}")
 
 class MoleculeDataset(Dataset):
@@ -60,14 +60,14 @@ class MoleculeDataset(Dataset):
         pass
 
     def process(self):
-        self.data = pd.read_csv(self.raw_paths[0]).reset_index()
+        f = open(self.raw_paths[0], 'r')
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
-        for _, mol in tqdm(self.data.iterrows(), total=self.data.shape[0]):
+        for line in f:
             # Featurize molecule
-            f = featurizer.featurize(mol["smiles"])
+            f = featurizer.featurize(line)
             data = f[0].to_pyg_graph()
-            data.y = self._get_label(mol["HIV_active"])
-            data.smiles = mol["smiles"]
+            data.y = 0
+            data.smiles = line
 
             # Get the molecule's atom types
             atom_types = slice_atom_type_from_node_feats(data.x)
@@ -80,7 +80,6 @@ class MoleculeDataset(Dataset):
 
                 data.x  = F.pad(data.x, (0, 0, 0, rows_needed))
 
-
                 if self.test:
                     torch.save(data, 
                         os.path.join(self.processed_dir, 
@@ -90,9 +89,6 @@ class MoleculeDataset(Dataset):
                         os.path.join(self.processed_dir, 
                                     f'data_{self.length}.pt'))
                 self.length += 1
-            else:
-                pass
-                #print("Skipping invalid mol (too big/unknown atoms): ", data.smiles)
         print(f"Done. Stored {self.length} preprocessed molecules.")
 
     def _get_label(self, label):
@@ -103,10 +99,6 @@ class MoleculeDataset(Dataset):
         return self.length
 
     def get(self, idx):
-        """ 
-        - Equivalent to __getitem__ in pytorch
-        - Is not needed for PyG's InMemoryDataset
-        """
         if self.test:
             data = torch.load(os.path.join(self.processed_dir, 
                                  f'data_test_{idx}.pt'))

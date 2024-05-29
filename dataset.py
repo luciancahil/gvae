@@ -46,14 +46,18 @@ class MoleculeDataset(Dataset):
         pass
 
     def process(self):
-        self.data = pd.read_csv(self.raw_paths[0]).reset_index()
+        f = open(self.raw_paths[0], 'r')
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
-        for _, mol in tqdm(self.data.iterrows(), total=self.data.shape[0]):
+        index = 1000
+        for line in tqdm(f, total=3999):
             # Featurize molecule
-            f = featurizer.featurize(mol["smiles"])
+            index += 1
+            if(index > 2000):
+                break
+            f = featurizer.featurize(line)
             data = f[0].to_pyg_graph()
-            data.y = self._get_label(mol["HIV_active"])
-            data.smiles = mol["smiles"]
+            data.y = 0
+            data.smiles = line
 
             # Get the molecule's atom types
             atom_types = slice_atom_type_from_node_feats(data.x)

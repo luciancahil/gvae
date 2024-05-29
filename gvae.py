@@ -23,6 +23,8 @@ class GVAE(nn.Module):
         self.num_atom_types = len(SUPPORTED_ATOMS)
         self.max_num_atoms = MAX_MOLECULE_SIZE 
         self.decoder_hidden_neurons = 512
+        self.INTERMEDIATE_EDGE_INDEX = torch.tensor([[i, j] for i in range(MAX_MOLECULE_SIZE) for j in range(MAX_MOLECULE_SIZE)], dtype=torch.long).t().contiguous()
+
 
         # Encoder layers
         self.conv1 = TransformerConv(feature_size, 
@@ -170,8 +172,6 @@ class GVAE(nn.Module):
 
         batch = Batch.from_data_list(data_list)
 
-        # Generate all possible edges (i, j) where i != j
-        n = MAX_MOLECULE_SIZE
 
         #error here
         edge_logits = self.edge_conv_decoder(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
@@ -189,9 +189,7 @@ class GVAE(nn.Module):
         triu_logits = []
         # Iterate over molecules in batch
         node_logits = self.decode_atoms(z).flatten()
-        n = MAX_MOLECULE_SIZE
-        edge_index= torch.tensor([[i, j] for i in range(n) for j in range(n)], dtype=torch.long).t().contiguous()
-        triu_logits = self.decode_edges(z, edge_index)
+        triu_logits = self.decode_edges(z, self.INTERMEDIATE_EDGE_INDEX)
 
 
         return triu_logits, node_logits

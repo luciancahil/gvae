@@ -10,7 +10,7 @@ from gvae import GVAE
 from config import DEVICE as device
 
 # Load data
-train_dataset = MoleculeDataset(root="data/", filename="HIV_train_oversampled.csv")[:10000]
+train_dataset = MoleculeDataset(root="data/", filename="Train.csv")[:10000]
 test_dataset = MoleculeDataset(root="data/", filename="HIV_test.csv", test=True)[:1000]
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
@@ -76,7 +76,7 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
 
 # Run training
 with mlflow.start_run() as run:
-    for epoch in range(1): 
+    for epoch in range(100): 
         model.train()
         run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
         if epoch % 5 == 0:

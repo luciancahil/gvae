@@ -7,5 +7,5 @@ next(f)
 for i, line in enumerate(f):
     parts = line.split(",")
     out.write(parts[0] + "\n")
-    if(i >= 1000000):
+    if(i >= 679000):
         break

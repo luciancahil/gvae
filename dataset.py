@@ -49,7 +49,7 @@ class MoleculeDataset(Dataset):
         f = open(self.raw_paths[0], 'r')
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
         index = 1000
-        for line in tqdm(f, total=3999):
+        for line in f:
             # Featurize molecule
             index += 1
             if(index > 2000):

@@ -36,7 +36,7 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
         # Some of the data points have invalid adjacency matrices 
         try:
             # Use GPU
-            batch.to(device)  
+            batch = batch.to(device)
             # Reset gradients
             optimizer.zero_grad() 
             # Call model

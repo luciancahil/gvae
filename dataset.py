@@ -50,7 +50,6 @@ class MoleculeDataset(Dataset):
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
         for line in f:
             # Featurize molecule
-            index += 1
             f = featurizer.featurize(line)
             data = f[0].to_pyg_graph()
             data.y = 0

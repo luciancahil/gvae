@@ -8,6 +8,8 @@ from utils import (count_parameters, gvae_loss,
         slice_edge_type_from_edge_feats, slice_atom_type_from_node_feats)
 from gvae import GVAE
 from config import DEVICE as device
+import torch.nn as nn
+
 
 # Load data
 train_dataset = MoleculeDataset(root="data/", filename="Train.csv")[:10000]
@@ -17,7 +19,10 @@ test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
 # Load model
 model = GVAE(feature_size=train_dataset[0].x.shape[1]) # feature_size=30 by default
-model = model.to(device)
+if(torch.cuda.device_count() > 1):
+    model = nn.DataParallel(model)
+else:
+    model = model.to(device)
 print("Model parameters: ", count_parameters(model))
 
 # Define loss and optimizer

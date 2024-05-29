@@ -48,12 +48,9 @@ class MoleculeDataset(Dataset):
     def process(self):
         f = open(self.raw_paths[0], 'r')
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
-        index = 1000
         for line in f:
             # Featurize molecule
             index += 1
-            if(index > 2000):
-                break
             f = featurizer.featurize(line)
             data = f[0].to_pyg_graph()
             data.y = 0

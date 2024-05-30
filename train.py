@@ -42,7 +42,8 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
         # Some of the data points have invalid adjacency matrices 
         try:
             # Use GPU
-            batch = batch.to(f'cuda:{model.device_ids[0]}')
+            if(torch.cuda.device_count() > 0):
+                batch = batch.to(f'cuda:{model.device_ids[0]}')
             # Reset gradients
             optimizer.zero_grad() 
             # Call model

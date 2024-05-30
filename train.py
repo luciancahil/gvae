@@ -12,7 +12,6 @@ import torch.nn as nn
 
 
 # Load data
-breakpoint()
 train_dataset = MoleculeDataset(root="data/", filename="Train.csv")[:10000]
 test_dataset = MoleculeDataset(root="data/", filename="HIV_test.csv", test=True)[:1000]
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)

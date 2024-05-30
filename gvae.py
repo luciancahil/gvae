@@ -85,7 +85,12 @@ class GVAE(nn.Module):
         # GNN layers
         device = x.device  # Get the device of input tensor x
         edge_index = edge_index.to(device)  # Move edge_index to the same device
-        edge_attr = edge_attr.to(device)  # Move edge_attr to the same devi
+        edge_attr = edge_attr.to(device)  # Move edge_attr to the same device
+        print("Device:" + str(device))
+        print("EI:")
+        print(edge_index)
+        print("EA")
+        print(edge_attr)
         x = self.conv1(x, edge_index, edge_attr).relu()
         x = self.bn1(x)
         x = self.conv2(x, edge_index, edge_attr).relu()

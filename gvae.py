@@ -83,6 +83,7 @@ class GVAE(nn.Module):
 
     def encode(self, x, edge_attr, edge_index, batch_index):
         # GNN layers
+        print(edge_attr)
         x = self.conv1(x, edge_index, edge_attr).relu()
         x = self.bn1(x)
         x = self.conv2(x, edge_index, edge_attr).relu()

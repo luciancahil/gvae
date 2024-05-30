@@ -83,7 +83,9 @@ class GVAE(nn.Module):
 
     def encode(self, x, edge_attr, edge_index, batch_index):
         # GNN layers
-        print(edge_attr)
+        device = x.device  # Get the device of input tensor x
+        edge_index = edge_index.to(device)  # Move edge_index to the same device
+        edge_attr = edge_attr.to(device)  # Move edge_attr to the same devi
         x = self.conv1(x, edge_index, edge_attr).relu()
         x = self.bn1(x)
         x = self.conv2(x, edge_index, edge_attr).relu()

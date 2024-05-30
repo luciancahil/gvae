@@ -8,7 +8,6 @@ from utils import (count_parameters, gvae_loss,
         slice_edge_type_from_edge_feats, slice_atom_type_from_node_feats)
 from gvae import GVAE
 from config import DEVICE as device
-import torch.nn as nn
 
 
 # Load data
@@ -19,11 +18,11 @@ test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
 # Load model
 model = GVAE(feature_size=train_dataset[0].x.shape[1]) # feature_size=30 by default
-if(torch.cuda.device_count() > 1):
+""" if(torch.cuda.device_count() > 1):
     model = nn.DataParallel(model)
     model.to(f'cuda:{model.device_ids[0]}')
-else:
-    model = model.to(device)
+else: """
+model = model.to(device)
 print("Model parameters: ", count_parameters(model))
 
 # Define loss and optimizer
@@ -42,8 +41,9 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
         # Some of the data points have invalid adjacency matrices 
         try:
             # Use GPU
-            if(torch.cuda.device_count() > 0):
-                batch = batch.to(f'cuda:{model.device_ids[0]}')
+            """  if(torch.cuda.device_count() > 0):
+                batch = batch.to(f'cuda:{model.device_ids[0]}') """
+            batch.to(device)
             # Reset gradients
             optimizer.zero_grad() 
             # Call model

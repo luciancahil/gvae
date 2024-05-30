@@ -47,6 +47,7 @@ class MoleculeDataset(Dataset):
             self.length = index
             return [f'data_test_{i}.pt' for i in list(range(0, index))]
         else:
+            self.length = 670000
             return ['data_669999.pt']
         
 

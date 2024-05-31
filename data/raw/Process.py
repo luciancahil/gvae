@@ -7,5 +7,5 @@ next(f)
 for i, line in enumerate(f):
     parts = line.split(",")
     out.write(parts[0])
-    if(i >= 100):
+    if(i >= 10):
         break

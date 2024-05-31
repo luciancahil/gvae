@@ -246,33 +246,69 @@ class GVAE(nn.Module):
         for _ in tqdm(range(num)):
             # Sample latent space
             z = torch.randn(self.max_num_atoms, self.latent_embedding_size)
-
-            # Get model output (this could also be batched)
-            dummy_batch_index = torch.Tensor([0]).int()
-            ends = [20]
             
-            triu_logits, node_logits = self.decode(z, dummy_batch_index, ends)
-
-            # Reshape triu predictions 
-            edge_matrix_shape = (int((MAX_MOLECULE_SIZE * (MAX_MOLECULE_SIZE - 1))/2), len(SUPPORTED_EDGES) + 1) 
-            triu_preds_matrix = triu_logits.reshape(edge_matrix_shape)
-            triu_preds = torch.argmax(triu_preds_matrix, dim=1)
-
-            # Reshape node predictions
-            node_matrix_shape = (MAX_MOLECULE_SIZE, (len(SUPPORTED_ATOMS) + 1)) 
-            node_preds_matrix = node_logits.reshape(node_matrix_shape)
-            node_preds = torch.argmax(node_preds_matrix[:, :9], dim=1)
-            
-            # Get atomic numbers 
-            node_preds_one_hot = to_one_hot(node_preds, options=ATOMIC_NUMBERS)
-            atom_numbers_dummy = torch.Tensor(ATOMIC_NUMBERS).repeat(node_preds_one_hot.shape[0], 1)
-            atom_types = torch.masked_select(atom_numbers_dummy, node_preds_one_hot.bool())
-
-            # Attempt to create valid molecule
-            smiles, _ = graph_representation_to_molecule(atom_types, triu_preds.float())
+            smiles = self.generate_mol(z)
 
             # A dot means disconnected
             if smiles and "." not in smiles:
                 print("Successfully generated: ", smiles)
                 n_valid += 1    
         return n_valid
+    
+    def generate_mol(self, z): # get molecule from latent matrix  
+        triu_logits, node_logits = self.decode(z)
+
+        # Reshape triu predictions 
+        edge_matrix_shape = (int((MAX_MOLECULE_SIZE * (MAX_MOLECULE_SIZE - 1))/2), len(SUPPORTED_EDGES) + 1) 
+        triu_preds_matrix = triu_logits.reshape(edge_matrix_shape)
+        triu_preds = torch.argmax(triu_preds_matrix, dim=1)
+
+        # Reshape node predictions
+        node_matrix_shape = (MAX_MOLECULE_SIZE, (len(SUPPORTED_ATOMS) + 1)) 
+        node_preds_matrix = node_logits.reshape(node_matrix_shape)
+        node_preds = torch.argmax(node_preds_matrix[:, :9], dim=1)
+        
+        # Get atomic numbers 
+        node_preds_one_hot = to_one_hot(node_preds, options=ATOMIC_NUMBERS)
+        atom_numbers_dummy = torch.Tensor(ATOMIC_NUMBERS).repeat(node_preds_one_hot.shape[0], 1)
+        atom_types = torch.masked_select(atom_numbers_dummy, node_preds_one_hot.bool())
+
+        # Attempt to create valid molecule
+        smiles, _ = graph_representation_to_molecule(atom_types, triu_preds.float())
+
+        return smiles
+
+
+    def interpolate(self, data_list, num_points):
+        """
+        make a list of latents.
+        For each pair of latents, sample n points between them.
+
+        See if a molecule is valid.
+        If so, add the new_smiles to the smiles list. 
+        return the smiles list.
+        """
+        dummy_batch = [0] * self.max_num_atoms
+        latents = [self.encode(data.x, data.edge_attr, data.edge_index, dummy_batch)[0] for data in data_list]
+
+        num_latents = len(latents)
+        alpha = 1./ num_points
+        new_smiles = []
+        self.INTERMEDIATE_EDGE_INDEX = torch.tensor([[i, j] for i in range(MAX_MOLECULE_SIZE) for j in range(MAX_MOLECULE_SIZE)], dtype=torch.long).t().contiguous().to(device)
+
+
+        for i in range(num_latents):
+            for j in range(i + 1, num_latents):
+                diff = torch.sub(latents[i], latents[j])
+
+                for a in range(1, num_points):
+                    new = torch.sub(latents[i], diff, alpha = alpha * a)
+                    new_mol = self.generate_mol(new)
+                    if new_smiles and "." not in new_smiles:
+                        new_smiles.append(new_mol)
+        
+        print(new_smiles)
+
+
+# d = a - b
+# b = a - d

@@ -6,6 +6,6 @@ line_num = 0
 next(f)
 for i, line in enumerate(f):
     parts = line.split(",")
-    out.write(parts[0] + "\n")
+    out.write(parts[0])
     if(i >= 100):
         break

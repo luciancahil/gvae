@@ -6,6 +6,7 @@ from dataset import MoleculeDataset
 from utils import slice_atom_type_from_node_feats
 import deepchem as dc
 import torch.nn.functional as F
+from config import DEVICE as device
 
 
 model_path = sys.argv[1]
@@ -16,7 +17,7 @@ NUM_POINTS = 5
 featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
 
 
-model = torch.load(model_path)
+model = torch.load(model_path, map_location=device)
 
 MAX_MOLECULE_SIZE = model.max_num_atoms
 

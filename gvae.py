@@ -298,6 +298,7 @@ class GVAE(nn.Module):
 
 
         for i in range(num_latents):
+            print("I: " + str(i))
             for j in range(i + 1, num_latents):
                 diff = torch.sub(latents[i], latents[j])
 

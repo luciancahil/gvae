@@ -83,7 +83,7 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
 
 # Run training
 with mlflow.start_run() as run:
-    for epoch in range(100): 
+    for epoch in range(201): 
         model.train()
         run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
         if epoch % 5 == 0:

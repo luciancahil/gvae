@@ -76,7 +76,6 @@ class GVAE(nn.Module):
 
         # --- Edge decoding (outputs a triu tensor: (max_num_atoms*(max_num_atoms-1)/2*(#edge_types + 1) ))
         self.edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
-        self.edge_decode = Linear(self.decoder_hidden_neurons, self.edge_output_dim)
         self.edge_conv_decoder = GCNConv(self.latent_embedding_size, self.edge_output_dim)
 
         

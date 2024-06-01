@@ -47,8 +47,13 @@ class MoleculeDataset(Dataset):
             self.length = index
             return [f'data_test_{i}.pt' for i in list(range(0, index))]
         else:
-            self.length = 670000
-            return ['data_669999.pt']
+            processed_files = [file for file in processed_files if not "test" in file]
+            if len(processed_files) == 0:
+                return ["no_files.dummy"]
+            last_file = sorted(processed_files)[-1]
+            index = int(re.search(r'\d+', last_file).group())
+            self.length = index
+            return [f'data_{i}.pt' for i in list(range(0, index))]
         
 
     def download(self):

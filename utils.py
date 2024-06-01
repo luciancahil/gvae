@@ -6,6 +6,7 @@ from config import DEVICE as device
 from config import (SUPPORTED_ATOMS, SUPPORTED_EDGES, MAX_MOLECULE_SIZE, ATOMIC_NUMBERS,
                     DISABLE_RDKIT_WARNINGS)
 import torch.nn.functional as F
+import torch.nn as nn
 
 # Disable rdkit warnings
 if DISABLE_RDKIT_WARNINGS:
@@ -197,6 +198,10 @@ def calculate_node_edge_pair_loss(node_tar, edge_tar, node_pred, edge_pred):
     # TODO: Improve loss
     return node_edge_loss #  * node_edge_node_loss
 
+def cross_entropy(inputs, targets):
+    cross = nn.CrossEntropyLoss()
+    return cross(inputs, targets)
+
 
 def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
     """
@@ -204,7 +209,7 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
     TODO: Improve loss function 
     """
     # Convert targets to one hot
-    onehot_node_targets = to_one_hot(node_targets, SUPPORTED_ATOMS ) #+ ["None"]
+    onehot_node_targets = to_one_hot(node_targets, SUPPORTED_ATOMS + ["None"])
     onehot_triu_targets = to_one_hot(triu_targets, ["None"] + SUPPORTED_EDGES)
 
     # Reshape node predictions
@@ -217,7 +222,7 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
 
     # Apply sum on labels per (node/edge) type and discard "none" types
     node_preds_reduced = torch.sum(node_preds_matrix[:, :9], 0)
-    node_targets_reduced = torch.sum(onehot_node_targets, 0)
+    node_targets_reduced = torch.sum(onehot_node_targets[:, :9], 0)
     triu_preds_reduced = torch.sum(triu_preds_matrix[:, 1:], 0)
     triu_targets_reduced = torch.sum(onehot_triu_targets[:, 1:], 0)
     
@@ -227,12 +232,14 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
 
     # Calculate node-edge-sum loss
     # Forces the model to properly arrange the matrices
-    node_edge_loss = calculate_node_edge_pair_loss(onehot_node_targets, 
-                                      onehot_triu_targets, 
-                                      node_preds_matrix, 
-                                      triu_preds_matrix)
+    # instead of this fat function, take a softmax of the preds, then take the sum square difference.
+    onehot_node_targets = torch.argmax(onehot_node_targets, dim=1)
+    onehot_triu_targets = torch.argmax(onehot_triu_targets, dim=1)
 
-    approx_loss =   node_loss  + edge_loss + node_edge_loss
+    node_place_loss = cross_entropy(node_preds_matrix, onehot_node_targets)
+    edge_place_loss = cross_entropy(triu_preds_matrix, onehot_triu_targets)
+
+    approx_loss =   node_loss  + edge_loss + node_place_loss + edge_place_loss
 
     """ if all(node_targets_reduced == node_preds_reduced.int()) and \
         all(triu_targets_reduced == triu_preds_reduced.int()):

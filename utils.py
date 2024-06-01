@@ -220,15 +220,6 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
     edge_matrix_shape = (int((MAX_MOLECULE_SIZE * (MAX_MOLECULE_SIZE - 1))/2), len(SUPPORTED_EDGES) + 1) 
     triu_preds_matrix = triu_preds.reshape(edge_matrix_shape)
 
-    # Apply sum on labels per (node/edge) type and discard "none" types
-    node_preds_reduced = torch.sum(node_preds_matrix[:, :9], 0)
-    node_targets_reduced = torch.sum(onehot_node_targets[:, :9], 0)
-    triu_preds_reduced = torch.sum(triu_preds_matrix[:, 1:], 0)
-    triu_targets_reduced = torch.sum(onehot_triu_targets[:, 1:], 0)
-    
-    # Calculate node-sum loss and edge-sum loss
-    node_loss = sum(squared_difference(node_preds_reduced, node_targets_reduced.float()))
-    edge_loss = sum(squared_difference(triu_preds_reduced, triu_targets_reduced.float()))
 
     # Calculate node-edge-sum loss
     # Forces the model to properly arrange the matrices
@@ -239,7 +230,7 @@ def approximate_recon_loss(node_targets, node_preds, triu_targets, triu_preds):
     node_place_loss = cross_entropy(node_preds_matrix, onehot_node_targets)
     edge_place_loss = cross_entropy(triu_preds_matrix, onehot_triu_targets)
 
-    approx_loss =   node_loss  + edge_loss + node_place_loss + edge_place_loss
+    approx_loss =  node_place_loss + edge_place_loss
 
     """ if all(node_targets_reduced == node_preds_reduced.int()) and \
         all(triu_targets_reduced == triu_preds_reduced.int()):

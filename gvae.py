@@ -26,6 +26,7 @@ class GVAE(nn.Module):
         self.decoder_hidden_neurons = 512
         self.INTERMEDIATE_EDGE_INDEX = torch.tensor([[i, j] for i in range(MAX_MOLECULE_SIZE) for j in range(MAX_MOLECULE_SIZE)], dtype=torch.long).t().contiguous().to(device)
 
+        self.dropout = nn.Dropout(p=0.2)
 
         # Encoder layers
         self.conv1 = TransformerConv(feature_size, 
@@ -42,20 +43,7 @@ class GVAE(nn.Module):
                                     beta=True,
                                     edge_dim=self.edge_dim)
         self.bn2 = BatchNorm(self.encoder_embedding_size)
-        self.conv3 = TransformerConv(self.encoder_embedding_size, 
-                                    self.encoder_embedding_size, 
-                                    heads=4, 
-                                    concat=False,
-                                    beta=True,
-                                    edge_dim=self.edge_dim)
         self.bn3 = BatchNorm(self.encoder_embedding_size)
-        self.conv4 = TransformerConv(self.encoder_embedding_size, 
-                                    self.encoder_embedding_size, 
-                                    heads=4, 
-                                    concat=False,
-                                    beta=True,
-                                    edge_dim=self.edge_dim)
-
         # Pooling layers
         self.pooling = Set2Set(self.encoder_embedding_size, processing_steps=4)
 
@@ -76,22 +64,22 @@ class GVAE(nn.Module):
 
         # --- Edge decoding (outputs a triu tensor: (max_num_atoms*(max_num_atoms-1)/2*(#edge_types + 1) ))
         self.edge_output_dim = int(((self.max_num_atoms * (self.max_num_atoms - 1)) / 2) * (self.num_edge_types + 1))
-        self.edge_conv_decoder = GCNConv(self.latent_embedding_size, self.edge_output_dim)
+        self.edge_conv_decoder = GCNConv(self.latent_embedding_size, self.latent_embedding_size)
+        self.edge_conv_decoder_2 = GCNConv(self.latent_embedding_size, self.edge_output_dim)
+
 
         
 
-    def encode(self, x, edge_attr, edge_index, batch_index):
+    def encode(self, x, edge_attr, edge_index):
         # GNN layers
         device = x.device  # Get the device of input tensor x
         edge_index = edge_index.to(device)  # Move edge_index to the same device
         edge_attr = edge_attr.to(device)  # Move edge_attr to the same device
         x = self.conv1(x, edge_index, edge_attr).relu()
         x = self.bn1(x)
+        x = self.dropout(x)
         x = self.conv2(x, edge_index, edge_attr).relu()
         x = self.bn2(x)
-        x = self.conv3(x, edge_index, edge_attr).relu()
-        x = self.bn3(x)
-        x = self.conv4(x, edge_index, edge_attr).relu()
 
 
 
@@ -119,10 +107,6 @@ class GVAE(nn.Module):
         # 1D edge weight array
         hat_A = hat_A[hat_A != 0]
 
-
-        # Generate all possible edges (i, j) where i != j
-        n = MAX_MOLECULE_SIZE
-
         out = self.edge_conv_decoder(graph_z, edge_index, edge_weight = hat_A)
 
         edge_logits = torch.mean(out, dim=0)
@@ -134,18 +118,14 @@ class GVAE(nn.Module):
     def decode_atoms(self, z):
         # Decode atom types
         z = self.linear_1(z).relu()
+        self.dropout(z)
         z = self.linear_2(z).relu()
         z = self.atom_decode_layer(z)
 
         return z
-
-    def decode_edges(self, z):
-        # Reshape Z to represent a batch of 6 matrices of size 20 x 10
-        
-        z = z.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
-
+    
+    def weight_matrix(self, z):
         # Compute Z*Z^T for each matrix in the batch
-        #TODO is there a batch triu option?
         ZZT = torch.bmm(z, z.transpose(1, 2)) 
 
         # Compute the Frobenius norm squared for each matrix in the batch
@@ -153,13 +133,19 @@ class GVAE(nn.Module):
 
         # Normalize ZZ^T by the Frobenius norm squared
         normalized_ZZT = ZZT / frobenius_norm_sq  # Broadcasting to (6, 20, 20)
-
-        # Create a matrix of ones of the same size as each ZZ^T
-        ones_matrix = torch.ones_like(ZZT)  # Shape: (6, 20, 20)
+    
+            # Create a matrix of ones of the same size as each ZZ^T
+        ones_matrix = torch.ones_like(normalized_ZZT)  # Shape: (6, 20, 20)
 
         # Compute the final result
         hat_A = normalized_ZZT + ones_matrix
 
+        return hat_A
+    
+    # multiplies a matrix by its transpose, then normalizes and adds one
+    # used to generate data
+    def get_decode_batch(self, z):
+        hat_A = self.weight_matrix(z)
 
         # Create a mask for the diagonal elements
         batch_size, matrix_size, _ = hat_A.shape
@@ -175,15 +161,31 @@ class GVAE(nn.Module):
 
         batch = Batch.from_data_list(data_list)
 
+        return batch
 
-        #error here
-        edge_logits = self.edge_conv_decoder(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
+    def decode_edges(self, z):
+        # Reshape Z to represent a batch of 6 matrices of size 20 x 10
+        
+        z = z.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
 
+        batch = self.get_decode_batch(z)
+
+        z_prime = self.edge_conv_decoder(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
+        self.dropout(z_prime)
+
+
+        z_prime = z_prime.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
+
+        batch = self.get_decode_batch(z_prime)
+
+        # get the final output
+        edge_logits = self.edge_conv_decoder_2(batch.x, edge_index = batch.edge_index, edge_weight = batch.edge_weight)
 
         # take the average
         edge_logits = edge_logits.view(-1, MAX_MOLECULE_SIZE, self.edge_output_dim)
         edge_logits = torch.mean(edge_logits, dim=1)
         edge_logits = edge_logits.flatten()
+
 
         return edge_logits
 
@@ -209,9 +211,9 @@ class GVAE(nn.Module):
         else:
             return mu
 
-    def forward(self, x, edge_attr, edge_index, batch_index): # batch index tells us where each node is.
+    def forward(self, x, edge_attr, edge_index): # batch index tells us where each node is.
         # Encode the molecule
-        mu, logvar = self.encode(x, edge_attr, edge_index, batch_index)
+        mu, logvar = self.encode(x, edge_attr, edge_index)
         # Sample latent vector (per atom)
         z = self.reparameterize(mu, logvar)
         #ends = self.find_ends(batch_index)

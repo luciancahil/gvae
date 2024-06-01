@@ -49,8 +49,7 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
             # Call model
             triu_logits, node_logits, mu, logvar = model(batch.x.float(), 
                                                         batch.edge_attr.float(),
-                                                        batch.edge_index, 
-                                                        batch.batch) 
+                                                        batch.edge_index) 
             # Calculate loss and backpropagate
             edge_targets = slice_edge_type_from_edge_feats(batch.edge_attr.float())
             node_targets = slice_atom_type_from_node_feats(batch.x.float(), as_index=True)

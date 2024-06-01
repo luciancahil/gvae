@@ -10,7 +10,7 @@ SUPPORTED_ATOMS = ["C", "N", "O", "F", "P", "S", "Cl", "Br", "I"]
 ATOMIC_NUMBERS =  [6, 7, 8, 9, 15, 16, 17, 35, 53]
 
 # Dataset (if you change this, delete the processed files to run again)
-MAX_MOLECULE_SIZE = 50
+MAX_MOLECULE_SIZE = 76
 
 # To remove valence errors ect.
 DISABLE_RDKIT_WARNINGS = True

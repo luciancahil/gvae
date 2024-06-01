@@ -11,7 +11,7 @@ from config import DEVICE as device
 
 
 # Load data
-train_dataset = MoleculeDataset(root="data/", filename="Test_670000.csv")[:10000]
+train_dataset = MoleculeDataset(root="data/", filename="Train_670000.csv")[:10000]
 test_dataset = MoleculeDataset(root="data/", filename="HIV_test.csv", test=True)[:1000]
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=2, shuffle=True)

@@ -77,18 +77,18 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
         mlflow.log_metric(key=f"Sampled molecules", value=float(generated_mols), step=epoch) """
 
     print(f"{curr_type} epoch {epoch} loss: ", np.array(all_losses).mean())
-    mlflow.log_metric(key=f"{curr_type} Epoch Loss", value=float(np.array(all_losses).mean()), step=epoch)
+"""     mlflow.log_metric(key=f"{curr_type} Epoch Loss", value=float(np.array(all_losses).mean()), step=epoch)
     mlflow.log_metric(key=f"{curr_type} KL Divergence", value=float(np.array(all_kldivs).mean()), step=epoch)
-    mlflow.pytorch.log_model(model, "model")
+    mlflow.pytorch.log_model(model, "model") """
 
 # Run training
-with mlflow.start_run() as run:
-    for epoch in range(201): 
-        model.train()
-        run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
-        if epoch % 5 == 0:
-            print("Start test epoch...")
-            model.eval()
-            run_one_epoch(test_loader, curr_type="Test", epoch=epoch, kl_beta=kl_beta)
-        
-    torch.save(model, "model.sh")
+#with mlflow.start_run() as run:
+for epoch in range(201): 
+    model.train()
+    run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
+    if epoch % 5 == 0:
+        print("Start test epoch...")
+        model.eval()
+        run_one_epoch(test_loader, curr_type="Test", epoch=epoch, kl_beta=kl_beta)
+    
+torch.save(model, "model.sh")

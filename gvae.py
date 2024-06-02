@@ -81,10 +81,6 @@ class GVAE(nn.Module):
         x = self.conv2(x, edge_index, edge_attr).relu()
         x = self.bn2(x)
 
-
-        print(x)
-        1/0
-
         # Latent transform layers
         mu = self.mu_transform(x)
         logvar = self.logvar_transform(x)

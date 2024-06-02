@@ -19,7 +19,7 @@ class GVAE(nn.Module):
         super(GVAE, self).__init__()
         self.encoder_embedding_size = 64
         self.edge_dim = 11
-        self.latent_embedding_size = 121           
+        self.latent_embedding_size = 3           
         self.num_edge_types = len(SUPPORTED_EDGES) 
         self.num_atom_types = len(SUPPORTED_ATOMS)
         self.max_num_atoms = MAX_MOLECULE_SIZE 

@@ -21,4 +21,5 @@ module load git
 source ~/.bashrc
 conda activate gvae_2
 python train.py
+python interpolate.py model.sh
 conda deactivate

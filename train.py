@@ -8,6 +8,8 @@ from utils import (count_parameters, gvae_loss,
         slice_edge_type_from_edge_feats, slice_atom_type_from_node_feats)
 from gvae import GVAE
 from config import DEVICE as device
+import torch.optim as optim
+
 
 
 # Load data
@@ -28,6 +30,7 @@ print("Model parameters: ", count_parameters(model))
 # Define loss and optimizer
 loss_fn = gvae_loss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
 kl_beta = 0.5
 
 # Train function
@@ -60,6 +63,8 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
             if curr_type == "Train":
                 loss.backward()  
                 optimizer.step() 
+                scheduler.step(loss)
+
             # Store loss and metrics
             all_losses.append(loss.detach().cpu().numpy())
             #all_accs.append(acc)
@@ -82,7 +87,7 @@ def run_one_epoch(data_loader, curr_type, epoch, kl_beta):
 
 # Run training
 #with mlflow.start_run() as run:
-for epoch in range(201): 
+for epoch in range(101): 
     model.train()
     run_one_epoch(train_loader, curr_type="Train", epoch=epoch, kl_beta=kl_beta)
     if epoch % 5 == 0:

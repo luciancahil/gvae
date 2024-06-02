@@ -82,6 +82,8 @@ class GVAE(nn.Module):
         x = self.bn2(x)
 
 
+        print(x)
+        1/0
 
         # Latent transform layers
         mu = self.mu_transform(x)
@@ -174,6 +176,7 @@ class GVAE(nn.Module):
         self.dropout(z_prime)
 
 
+
         z_prime = z_prime.view(-1, MAX_MOLECULE_SIZE, self.latent_embedding_size)
 
         batch = self.get_decode_batch(z_prime)
@@ -219,6 +222,8 @@ class GVAE(nn.Module):
         #ends = self.find_ends(batch_index)
         # Decode latent vector into original molecule
         triu_logits, node_logits = self.decode(z)
+
+        
 
         return triu_logits, node_logits, mu, logvar
     
@@ -290,7 +295,7 @@ class GVAE(nn.Module):
         return the smiles list.
         """
         dummy_batch = [0] * self.max_num_atoms
-        latents = [self.encode(data.x, data.edge_attr, data.edge_index, dummy_batch)[0] for data in data_list]
+        latents = [self.encode(data.x, data.edge_attr, data.edge_index)[0] for data in data_list]
 
         num_latents = len(latents)
         alpha = 1./ num_points

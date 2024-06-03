@@ -1,6 +1,6 @@
 import selfies as sf
 
-f = open("Train.csv", "r")
+f = open("Train_670000.csv", "r")
 
 symbol_count = dict()
 len_count = dict()
